@@ -1,131 +1,351 @@
 # Parts of an Operating System
 
-An operating system (OS) is built in layers. Each layer has a specific job, from talking directly to hardware up to showing you a nice desktop. Below is a clear, organized explanation of every major part, with simple definitions for terms you might not know.
+An operating system is structured in **layers**, starting from the lowest-level code that runs at power-on, up to user-facing applications. Each layer has a clearly defined responsibility and interacts with adjacent layers through well-defined interfaces.
 
-### 1. Firmware & Boot Process (The very first things that run)
+---
 
-- **BIOS / UEFI**  
-  This is software stored on your motherboard's chip. When you press the power button, it wakes up first.  
-  It checks if the hardware (CPU, RAM, keyboard, etc.) is working (this is called **POST** = Power-On Self-Test), turns on basic devices, and then finds and starts the **bootloader**.  
-  Old computers used **BIOS**; almost all modern computers use **UEFI** (faster, supports big hard drives, has a mouse-friendly menu, and can do **secure boot** to prevent malware from starting early).
+## 1. Firmware and Boot Process
 
-- **Bootloader**  
-  A small program that knows where your operating system files are.  
-  It loads the **kernel** (the heart of the OS) into RAM and hands control over to it.  
-  Examples: GRUB (most Linux), systemd-boot (some Linux), Windows Boot Manager, Apple's bootloader.  
-  It often shows a menu if you have multiple operating systems installed.
+*(The first software that runs after power-on)*
 
-### 2. The Kernel (The most important and privileged part)
+### BIOS / UEFI
 
-The **kernel** is the only software allowed to talk directly to hardware. Everything else asks the kernel for help. It runs in a special protected mode called **kernel mode**.
+* **Firmware** stored on a non-volatile chip on the motherboard.
+* Executes immediately after the system is powered on.
+* Responsibilities:
 
-#### Kernel Styles (How the kernel is designed)
-- **Monolithic kernel**  
-  Almost everything (file system, drivers, networking) is inside one big kernel program.  
-  Fast, but if one part crashes, the whole system usually crashes.  
-  Example → Linux, FreeBSD.
+  * Initialize CPU, memory, and essential devices
+  * Perform **POST** (Power-On Self-Test)
+  * Locate and start a bootable device
+  * Transfer control to the **bootloader**
 
-- **Microkernel**  
-  Only the smallest, most critical parts run inside the kernel. Everything else (drivers, file systems) runs as normal programs outside.  
-  Safer and easier to fix bugs, but slower because parts talk via messages.  
-  Examples → QNX (used in cars), Minix, seL4 (very secure research kernel).
+**BIOS vs UEFI**
 
-- **Hybrid kernel**  
-  Mix of both: important things run fast inside the kernel, but some parts can be loaded separately.  
-  Examples → Windows (NT kernel), macOS (XNU kernel).
+* **BIOS**: Legacy system, limited features
+* **UEFI** (modern standard):
 
-#### Main Jobs Inside the Kernel
-- **Process & Thread Management**  
-  A **process** is a running program (like your web browser). A **thread** is a small unit of work inside a process (browser can have many tabs = many threads).  
-  The kernel decides which process/thread gets to use the CPU at any moment (**scheduling**), starts/stops them, and switches between them (**context switching**).
+  * Faster startup
+  * Support for large disks (GPT)
+  * Graphical configuration interface
+  * **Secure Boot** to prevent unauthorized boot software
 
-- **Memory Management**  
-  Gives each program its own fake (“virtual”) memory space so they don’t overwrite each other.  
-  Uses **paging** (memory divided into small pages), **page faults** (when program needs data not in RAM), **swapping** (moving unused pages to disk), and protects memory so one program can’t read another’s data.
+---
 
-- **File System & Storage Management**  
-  Lets programs read/write files without knowing whether they are on SSD, HDD, USB, or network.  
-  **Virtual File System (VFS)** → a common interface layer in Linux that hides differences between file systems (ext4, NTFS, FAT32, etc.).  
-  Manages **page cache** (keeps recently used file data in RAM for speed), **I/O scheduler** (decides order of disk reads/writes), and encryption tools.
+### Bootloader
 
-- **Device Drivers**  
-  Small programs that know how to talk to specific hardware (your Wi-Fi card, graphics card, printer, keyboard).  
-  In Linux these are often **kernel modules** (.ko files) that can be loaded/unloaded without rebooting.
+* A small program stored on disk.
+* Loads the **kernel** into memory and starts it.
+* May provide a menu for selecting operating systems.
 
-- **Networking Stack**  
-  Handles internet and local network communication.  
-  Implements **TCP/IP** (rules for sending data over internet), **sockets** (way programs talk over network), firewall rules, etc.
+**Common examples**
 
-- **Security & Protection**  
-  Controls who can do what.  
-  Includes **capabilities** (fine-grained permissions instead of just root/regular user), **SELinux/AppArmor** (extra strict rules), **seccomp** (limits what a program can ask the kernel to do), and **namespaces & cgroups** (used for containers):  
-  → **Namespaces** → make it look like a process has its own private view of the system (own processes, network, files).  
-  → **cgroups** (control groups) → limit how much CPU, memory, disk I/O a group of processes can use.
+* GRUB, systemd-boot (Linux)
+* Windows Boot Manager
+* Apple bootloader
 
-- **Inter-Process Communication (IPC)**  
-  Ways programs talk to each other: pipes (| in terminal), shared memory, signals, sockets, etc.
+---
 
-- **Power & Thermal Management**  
-  Lowers CPU speed or turns off unused parts to save battery and prevent overheating.
+## 2. The Kernel
 
-### 3. System Call Interface (The door between user programs and kernel)
+*(The core of the operating system)*
 
-Programs cannot directly access hardware or kernel data. They ask for help by making **system calls** (syscalls).  
-Examples: open a file, read keyboard input, send data over network.  
-This is the only safe bridge between normal programs and the kernel.
+The **kernel** is the most critical component of the OS.
+It runs in **kernel mode**, with unrestricted access to hardware.
 
-### 4. Core Userspace Libraries & Runtime
+All other software must interact with hardware **indirectly**, through the kernel.
 
-- **C Standard Library** (libc)  
-  A collection of ready-made functions for C programs (printf, malloc, open, fork, etc.).  
-  Most common: **glibc** (GNU C Library – big, feature-rich, used by most Linux distros) vs **musl** (small, simple, used in Alpine Linux, good for containers).
+---
 
-- **POSIX API**  
-  Stands for **Portable Operating System Interface**.  
-  A set of standard rules and function names (like open(), read(), fork()) that Unix-like systems (Linux, macOS, BSD) follow.  
-  If a program uses only POSIX functions, it can usually run on any POSIX-compatible OS with little or no change.
+### 2.1 Kernel Architecture Styles
 
-### 5. System Services & Daemons (Background programs)
+#### Monolithic Kernel
 
-- **Init system**  
-  The first user-space program that starts after kernel boots. It starts all other services.  
-  Modern Linux → **systemd** (very powerful, handles services, logging, networking, user logins).  
-  Others → OpenRC, SysV init (older), launchd (macOS).
+* Most OS services run inside the kernel:
 
-- **Common daemons** (services that run in background)  
-  - NetworkManager → handles Wi-Fi and Ethernet  
-  - dbus → lets programs send messages to each other  
-  - udevd → detects and sets up new devices (USB plug in)  
-  - sshd → allows remote login
+  * Device drivers
+  * File systems
+  * Networking
+* High performance, lower isolation
 
-### 6. Graphical & User Interface Stack
+**Examples**: Linux, FreeBSD
 
-- **Display Server / Protocol**  
-  Manages windows, mouse, keyboard input.  
-  Old → **X11 / X.Org** (not very secure).  
-  Modern → **Wayland** (more secure, smoother, most new desktops use it).
+---
 
-- **Compositor / Window Manager**  
-  Draws windows on screen, handles transparency, animations, moving/resizing windows.  
-  Examples: Mutter (GNOME), KWin (KDE Plasma), Sway (tiling manager).
+#### Microkernel
 
-- **Desktop Environment (DE)**  
-  Full user interface package: menus, file manager, settings app, wallpapers, themes.  
-  Popular: **GNOME** (simple, modern), **KDE Plasma** (very customizable), **XFCE** (lightweight), **Cinnamon** (traditional Windows-like).
+* Only minimal functionality in kernel:
 
-- **Widget Toolkits**  
-  Libraries used to draw buttons, menus, windows: **GTK** (used by GNOME), **Qt** (used by KDE).
+  * Scheduling
+  * IPC
+  * Basic memory management
+* Other services run in user space
 
-### 7. User Applications & Tools
+**Advantages**: strong isolation, reliability
+**Tradeoff**: IPC overhead
 
-- Terminal + shell (bash, zsh, fish) → command line  
-- File managers (Nautilus, Dolphin)  
-- Web browsers, text editors, games, etc.  
-- Package managers (apt, dnf, pacman) → install software
+**Examples**: QNX, MINIX, seL4
 
-### 8. Modern / Emerging Concepts (2025–2026)
+---
 
-- **eBPF** → safe way to run small programs inside the kernel without changing kernel code. Used for monitoring, security, networking.  
-- **Flatpak / Snap** → new way to package apps so they work on any Linux distro.  
-- **PipeWire** → modern replacement for old audio systems (better for video calls, low-latency audio).  
-- **Immutable OS** → OS files are read-only; updates create a new clean version (Silverblue, NixOS).
+#### Hybrid Kernel
+
+* Combines ideas from both models
+* Performance-critical services in kernel space
+* Modular design
+
+**Examples**: Windows NT, macOS (XNU)
+
+---
+
+### 2.2 Core Responsibilities of the Kernel
+
+#### Process and Thread Management
+
+* **Process**: an executing program with its own address space
+* **Thread**: a lightweight execution unit within a process
+
+Kernel responsibilities:
+
+* Process creation and termination
+* CPU scheduling
+* Context switching
+* Thread synchronization
+
+---
+
+#### Memory Management
+
+* Provides each process with a **virtual address space**
+* Prevents processes from accessing each other’s memory
+
+Key concepts:
+
+* Paging
+* Page faults
+* Swapping
+* Memory protection and access control
+
+---
+
+#### File System and Storage Management
+
+* Abstracts storage devices into files and directories
+* Allows uniform access regardless of storage type
+
+Key components:
+
+* **Virtual File System (VFS)** abstraction
+* Page cache
+* I/O scheduling
+* File system permissions and encryption
+
+---
+
+#### Device Drivers
+
+* Specialized kernel components that communicate with hardware
+* Translate generic OS requests into device-specific commands
+
+In Linux:
+
+* Often implemented as **loadable kernel modules**
+
+---
+
+#### Networking Stack
+
+* Implements communication protocols
+* Handles packet routing, buffering, and transmission
+
+Includes:
+
+* TCP/IP
+* Sockets API
+* Firewalls and packet filtering
+
+---
+
+#### Security and Protection
+
+* Enforces system security policies
+
+Includes:
+
+* User and process permissions
+* Capabilities
+* Mandatory access control (SELinux, AppArmor)
+* **seccomp** (restricts system calls)
+* **Namespaces** (isolation)
+* **cgroups** (resource limits)
+
+---
+
+#### Inter-Process Communication (IPC)
+
+Mechanisms for communication between processes:
+
+* Pipes
+* Shared memory
+* Signals
+* Message queues
+* Sockets
+
+---
+
+#### Power and Thermal Management
+
+* CPU frequency scaling
+* Power-saving states
+* Thermal monitoring and throttling
+
+---
+
+## 3. System Call Interface
+
+*(Boundary between user space and kernel space)*
+
+User programs cannot access hardware directly.
+
+They request kernel services via **system calls**, which safely transfer control from:
+
+* **User mode → Kernel mode**
+
+Examples:
+
+* File I/O
+* Process creation
+* Network communication
+
+This interface is critical for **security and stability**.
+
+---
+
+## 4. Core User-Space Libraries and Runtime
+
+### C Standard Library (libc)
+
+* Provides higher-level functions built on system calls
+* Used by almost all applications
+
+Common implementations:
+
+* **glibc** – feature-rich, widely used
+* **musl** – small, simple, container-friendly
+
+---
+
+### POSIX API
+
+* **Portable Operating System Interface**
+* Defines standard behavior for Unix-like systems
+
+Benefits:
+
+* Source-level portability
+* Consistent system programming model
+
+---
+
+## 5. System Services and Daemons
+
+*(Background system processes)*
+
+### Init System
+
+* First user-space process started by the kernel
+* Responsible for starting and managing all other services
+
+Examples:
+
+* systemd (modern Linux)
+* OpenRC
+* SysV init (legacy)
+* launchd (macOS)
+
+---
+
+### Common System Daemons
+
+* Network configuration services
+* Device management (udev)
+* Inter-process messaging (D-Bus)
+* Remote access (SSH)
+
+---
+
+## 6. Graphical and User Interface Stack
+
+### Display Server / Protocol
+
+* Handles display output and input events
+
+Examples:
+
+* X11 (legacy)
+* Wayland (modern, more secure)
+
+---
+
+### Window Manager / Compositor
+
+* Controls window layout, animations, and rendering
+
+Examples:
+
+* Mutter
+* KWin
+* Sway
+
+---
+
+### Desktop Environment
+
+* Complete graphical user experience
+
+Examples:
+
+* GNOME
+* KDE Plasma
+* XFCE
+* Cinnamon
+
+---
+
+### Widget Toolkits
+
+* UI libraries for building applications
+
+Examples:
+
+* GTK
+* Qt
+
+---
+
+## 7. User Applications and Tools
+
+* Shells and terminals
+* File managers
+* Browsers, editors, IDEs
+* Package managers
+
+---
+
+## 8. Modern and Emerging OS Concepts
+
+* **eBPF** – programmable, safe kernel extensions
+* **Flatpak / Snap** – universal application packaging
+* **PipeWire** – modern audio/video infrastructure
+* **Immutable operating systems** – atomic updates and rollback support
+
+---
+
+## Final Mental Model
+
+> **The kernel controls hardware.
+> User space provides services.
+> Applications consume abstractions.**
+
+This layered structure is what makes modern operating systems **powerful, secure, portable, and scalable**.
+
+---
